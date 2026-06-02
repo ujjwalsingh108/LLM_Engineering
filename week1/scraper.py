@@ -1,55 +1,46 @@
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+import requests
+from fake_useragent import UserAgent
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+ua = UserAgent()
 
-def fetch_page_content(url: str) -> str:
+def get_random_headers():
+    return {
+        "User-Agent": ua.random, # Automatically picks a real, up-to-date user agent
+        "Accept-Language": "en-US,en;q=0.5"
+    }
+
+def fetch_website_contents(url):
     """
-    Fetches the content of a web page given its URL.
-    - Normalizes missing schemes (adds https:// if needed).
-    - Removes irrelevant tags (script, style, etc.).
-    - Returns title + cleaned body text, truncated to 4000 characters.
+    Return the title and contents of the website at the given url;
+    dynamically rotates headers for production stability.
     """
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
-    response = requests.get(url, headers=HEADERS, timeout=10)
-    response.raise_for_status()  # fail fast on bad responses
-
+    # Grab a fresh, randomized header set for this specific request
+    current_headers = get_random_headers()
+    
+    response = requests.get(url, headers=current_headers)
     soup = BeautifulSoup(response.content, "html.parser")
-    title = soup.title.string.strip() if soup.title else "No Title"
-
+    title = soup.title.string if soup.title else "No title found"
+    
     if soup.body:
-        for irrelevant in soup(["script", "style", "noscript", "iframe", "img", "input"]):
+        for irrelevant in soup.body(["script", "style", "img", "input"]):
             irrelevant.decompose()
         text = soup.body.get_text(separator="\n", strip=True)
     else:
         text = ""
+        
+    return (title + "\n\n" + text)[:2_000]
 
-    return (title + "\n\n" + text)[:4000]
-
-
-def fetch_page_links(url: str) -> list[str]:
+def fetch_website_links(url):
     """
-    Fetches all absolute links from a web page.
-    - Converts relative links to absolute using urljoin.
-    - Filters only http/https links.
-    - Returns a unique list of links.
+    Return the links on the website at the given url;
+    dynamically rotates headers for production stability.
     """
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
-    response = requests.get(url, headers=HEADERS, timeout=10)
-    response.raise_for_status()
-
+    # Grab a fresh, randomized header set for this specific request
+    current_headers = get_random_headers()
+    
+    response = requests.get(url, headers=current_headers)
     soup = BeautifulSoup(response.content, "html.parser")
-    links = set()
-
-    for a_tag in soup.find_all("a", href=True):
-        href = a_tag["href"].strip()
-        absolute_url = urljoin(url, href)
-        if absolute_url.startswith(("http://", "https://")):
-            links.add(absolute_url)
-
-    return sorted(links)
+    links = [link.get("href") for link in soup.find_all("a")]
+    return [link for link in links if link]
